@@ -173,3 +173,4 @@ workflows:
           configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
+      - windows-build
