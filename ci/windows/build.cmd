@@ -4,8 +4,4 @@
 :: isn't in the environment so we have to hardcode the whole path.
 call "c:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x86_amd64
 
-mkdir build
-cd build
-
-cmake.exe .. -DCMAKE_BUILD_TYPE=release -DVCPKG_TARGET_TRIPLET="x64-windows-static" -DENABLE_ZEEK_UNIT_TESTS=yes -DENABLE_CCACHE=yes -G Ninja
-cmake.exe --build .
+cmake.exe --build build -j 4
