@@ -1,39 +1,174 @@
-# This config was automatically generated from your source code
-# Stacks detected: cicd:github-actions:.github/workflows,deps:python:doc
 version: 2.1
+
 orbs:
-  python: circleci/python@2
+  win: circleci/windows@5.1.1
+
 jobs:
-  test-python:
-    # Install dependencies and run tests
+  linux-build:
+    parameters:
+      git_install:
+        type: string
+      configure:
+        type: string
+      docker_image:
+        type: string
+      deps_script:
+        type: string
+    environment:
+      ZEEK_CI: Circle
+      ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
+      ZEEK_CI_CPUS: 4
+      ZEEK_CI_BTEST_JOBS: 2
+      ZEEK_CI_BTEST_RETRIES: 2
+      ZEEK_CI_RUNNER_OS: linux
+      ZEEK_TEST_ULIMIT_OPEN_FILES: 256
+      ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
     docker:
-      - image: cimg/python:3.8-node
-    working_directory: ~/project/doc
+      - image: << parameters.docker_image >>
     steps:
-      - checkout:
-          path: ~/project
-      - python/install-packages
       - run:
-          name: Run tests
-          command: pytest --junitxml=junit.xml || ((($? == 5)) && echo 'Did not find any tests to run.')
+          name: Install git
+          command: << parameters.git_install >>
+      - checkout
+      - run:
+          name: Install dependencies
+          command: << parameters.deps_script >>
+      - run:
+          name: Update submodules
+          command: git submodule update --recursive --init
+      - restore_cache:
+          keys:
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - ccache-{{ .Environment.CIRCLE_JOB }}-
+      - run:
+          name: Setup ccache
+          command: |
+            mkdir -p ~/.ccache
+            ccache --set-config=max_size=2G
+            ccache --set-config=compression=true
+            ccache --zero-stats
+            ccache --show-stats
+      - run:
+          name: Build
+          command: ci/build.sh
+          environment:
+      - run:
+          name: Show ccache statistics
+          command: ccache --show-stats
+      - save_cache:
+          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ~/.ccache
+      - run:
+          name: Test
+          command: ci/test.sh
       - store_test_results:
-          path: junit.xml
-  deploy:
-    # This is an example deploy job, not actually used by the workflow
-    docker:
-      - image: cimg/base:stable
+          path: btest-results
+
+  windows-build:
+    environment:
+      ZEEK_CI_CPUS: 4
+      ZEEK_CI_BTEST_JOBS: 2
+      ZEEK_CI_BTEST_RETRIES: 2
+      ZEEK_CI_RUNNER_OS: linux
+      ZEEK_TEST_ULIMIT_OPEN_FILES: 256
+      ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
+    executor:
+      name: win/server-2022
+      size: large
     steps:
-      # Replace this with steps to deploy to users
       - run:
-          name: deploy
-          command: '#e.g. ./deploy.sh'
+          name: Install Chocolatey dependencies
+          command: |
+            choco install -y --no-progress sed
+            choco install -y --no-progress winflexbison3
+            choco install -y --no-progress ccache
+            choco install -y --no-progress ninja
       - run:
-          name: found github actions config
-          command: ':'
+          name: Enable git symlinks
+          command: git config --global core.symlinks true
+      - checkout:
+          # For some reason the default working path has stuff in it already so it can't clone into
+          # that. Unfortunately that means we have to change the working directory for every other
+          # command.
+          path: zeek
+      - run:
+          name: Update submodules
+          command: git submodule update --recursive --init
+          working_directory: zeek
+      - run:
+          name: Dump environment info
+          command: ci\windows\prepare.cmd
+          shell: cmd.exe
+          working_directory: zeek
+      - restore_cache:
+          name: Restore ccache
+          keys:
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - ccache-{{ .Environment.CIRCLE_JOB }}-
+      - restore_cache:
+          name: Restore vcpkg cache
+          keys:
+            - vcpkg-{{ .Branch }}-{{ .Revision }}
+            - vcpkg-{{ .Branch }}-
+            - vcpkg-
+      - run:
+          name: Setup ccache
+          command: |
+            mkdir C:\tmp\zeek-ccache
+            ccache --set-config=max_size=2G
+            ccache --set-config=compression=true
+            ccache --set-config=cache_dir=C:\tmp\zeek-ccache
+            ccache --zero-stats
+            ccache --show-stats
+      - run:
+          name: Configure
+          command: ci\windows\configure.cmd
+          working_directory: zeek
+      - save_cache:
+          name: Saving vcpkg build cache
+          key: vcpkg-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - zeek\auxil\vcpkg\installed
+            - zeek\auxil\vcpkg\packages
+            - zeek\auxil\vcpkg\downloads
+      - run:
+          name: Build
+          command: ci\windows\build.cmd
+          working_directory: zeek
+      - save_cache:
+          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - C:\tmp\zeek-ccache
+
 workflows:
-  build-and-test:
+  # build-and-test:
+  #   when:
+  #     not:
+  #       equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
+  #   jobs:
+      # - windows-build
+      # - linux-build:
+      #     name: ubuntu-24.04
+      #     git_install: apt update && apt install -y git
+      #     configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+      #     deps_script: ci/ubuntu-24.04/install_dependencies.sh
+      #     docker_image: ubuntu:24.04
+      # - linux-build:
+      #     name: fedora-43
+      #     git_install: dnf -y install git
+      #     configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+      #     deps_script: ci/fedora-43/install_dependencies.sh
+      #     docker_image: fedora:43
+  circleci-config-testing:
+    when:
+      equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
     jobs:
-      - test-python
-    # - deploy:
-    #     requires:
-    #       - test-python
+      - linux-build:
+          name: ubuntu-24.04
+          git_install: apt update && apt install -y git
+          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04

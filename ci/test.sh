@@ -71,6 +71,12 @@ function prep_artifacts {
     banner "Prepare artifacts"
     [[ -d .tmp ]] && rm -rf .tmp/script-coverage && tar -czf tmp.tar.gz .tmp
     junit2html btest-results.xml btest-results.html
+
+    if [[ "${ZEEK_CI}" == "Circle" ]]; then
+        # Copy these into a location where Circle can get to them easily for the tests view
+        mkdir -p ${CIRCLE_WORKING_DIRECTORY}/btest-results/$1
+        cp btest-results.xml ${CIRCLE_WORKING_DIRECTORY}/btest-results/$1/results.xml
+    fi
 }
 
 function run_btests {
@@ -81,7 +87,7 @@ function run_btests {
     ZEEK_PROFILER_FILE=$(pwd)/.tmp/script-coverage/XXXXXX \
         ${BTEST} -z ${ZEEK_CI_BTEST_RETRIES} -d -A -x btest-results.xml -j ${ZEEK_CI_BTEST_JOBS} ${ZEEK_CI_BTEST_EXTRA_ARGS} || result=1
     make coverage
-    prep_artifacts
+    prep_artifacts btest
     popd
     return 0
 }
@@ -115,7 +121,7 @@ function run_external_btests {
     pushd testing/external/zeek-testing
     cat btest.out
     make coverage
-    prep_artifacts
+    prep_artifacts zeek-testing
     popd
 
     if [[ -n "${zeek_testing_private_pid}" ]]; then
