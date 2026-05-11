@@ -23,6 +23,7 @@ jobs:
       ZEEK_CI_RUNNER_OS: linux
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
       ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
+      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
     docker:
       - image: << parameters.docker_image >>
     steps:
