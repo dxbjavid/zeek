@@ -22,7 +22,6 @@ jobs:
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: linux
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
-      ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
       ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
     docker:
       - image: << parameters.docker_image >>
@@ -42,6 +41,16 @@ jobs:
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - ccache-{{ .Environment.CIRCLE_JOB }}-
+      - restore_cache:
+          keys:
+            - zeek-testing-traces
+      - run:
+          name: Initialize external testing repos
+          command: ci/init-external-repos.sh
+      - save_cache:
+          key: zeek-testing-traces
+          paths:
+            - testing/external/zeek-testing-traces
       - run:
           name: Setup ccache
           command: |

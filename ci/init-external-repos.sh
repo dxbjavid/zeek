@@ -14,7 +14,7 @@ cd testing/external
 [[ ! -d zeek-testing ]] && make init
 cd zeek-testing
 
-if [[ -n "${CIRRUS_CI}" ]]; then
+if [[ -n "${ZEEK_CI}" ]]; then
     if [[ -d ../zeek-testing-traces ]]; then
         banner "Use existing/cached zeek-testing traces"
     else
@@ -32,7 +32,7 @@ cd ..
 # When running in Cirrus for the main repo, try to clone the private testsuite.
 # Note that this script is also called when populating the public cache, so
 # the zeek-testing-private dir could have been created/populated already.
-if [[ -n "${CIRRUS_CI}" ]] && [[ "${CIRRUS_REPO_OWNER}" == "zeek" ]] && [[ ! -d zeek-testing-private ]]; then
+if [[ -n "${ZEEK_CI}" ]] && [[ "${CIRRUS_REPO_OWNER}" == "zeek" ]] && [[ ! -d zeek-testing-private ]]; then
     # If we're running this on Cirrus, the SSH key won't be available to PRs,
     # so don't make any of this fail the task in that case.  (But technically,
     # the key is also available in PRs for people with write access to the
