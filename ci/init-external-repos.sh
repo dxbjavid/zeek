@@ -14,7 +14,7 @@ cd testing/external
 [[ ! -d zeek-testing ]] && make init
 cd zeek-testing
 
-if [[ -n "${ZEEK_CI}" ]]; then
+if [[ -n "${CIRCLECI}" ]]; then
     if [[ -d ../zeek-testing-traces ]]; then
         banner "Use existing/cached zeek-testing traces"
     else

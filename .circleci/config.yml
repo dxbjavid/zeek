@@ -4,6 +4,29 @@ orbs:
   win: circleci/windows@5.1.1
 
 jobs:
+  # Fetches the zeek-testing test traces either from a cache or the remote host
+  # and presents them in a workspace for other build jobs to use. This saves
+  # other jobs from having to download them.
+  fetch-test-traces:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - zeek-traces-v2
+      - run:
+          name: Initializing external testing repos
+          command: ci/init-external-repos.sh
+      - save_cache:
+          key: zeek-traces-v2
+          paths:
+            - testing/external/zeek-testing-traces
+      - persist_to_workspace:
+          root: .
+          paths:
+            - testing/external/zeek-testing-traces
+
   linux-build:
     parameters:
       git_install:
@@ -40,16 +63,11 @@ jobs:
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - ccache-{{ .Environment.CIRCLE_JOB }}-
-      - restore_cache:
-          keys:
-            - zeek-testing-traces
+      - attach_workspace:
+          at: .
       - run:
           name: Initialize external testing repos
           command: ci/init-external-repos.sh
-      - save_cache:
-          key: zeek-testing-traces
-          paths:
-            - testing/external/zeek-testing-traces
       - run:
           name: Setup ccache
           command: |
@@ -183,19 +201,11 @@ jobs:
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
             - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - ccache-{{ .Environment.CIRCLE_JOB }}-
-      # - restore_cache:
-      #     name: Restore external test traces cache
-      #     keys:
-      #       - zeek-testing-traces
-      #     working_directory: zeek
+      - attach_workspace:
+          at: .
       - run:
           name: Initialize external testing repos
           command: ci/init-external-repos.sh
-      # - save_cache:
-      #     name: Save external test traces cache
-      #     key: zeek-testing-traces
-      #     paths:
-      #       - testing/external/zeek-testing-traces
       - run:
           name: Setup ccache
           command: |
@@ -246,13 +256,16 @@ workflows:
     when:
       equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
     jobs:
+      - fetch-test-traces
       - linux-build:
           name: ubuntu-24.04
           git_install: apt update && apt install -y git
           configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
+          requires: [fetch-test-traces]
       - windows-build
       - macos-build:
           name: Xcode 26.5
           configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+          requires: [fetch-test-traces]
