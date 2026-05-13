@@ -3,10 +3,6 @@ version: 2.1
 orbs:
   win: circleci/windows@5.1.1
 
-environment:
-  ZEEK_CI: Circle
-  ZEEK_TEST_ULIMIT_OPEN_FILES: 256
-
 jobs:
   linux-build:
     parameters:
@@ -25,6 +21,7 @@ jobs:
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: linux
       ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
+      ZEEK_TEST_ULIMIT_OPEN_FILES: 256
     docker:
       - image: << parameters.docker_image >>
     steps:
@@ -168,7 +165,7 @@ jobs:
       ZEEK_CI_BTEST_JOBS: 6
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: macos
-      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
+      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}
     macos:
       xcode: 26.5.0
     resource_class: m4pro.medium
