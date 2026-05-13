@@ -153,6 +153,10 @@ jobs:
           key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - C:\tmp\zeek-ccache
+      - run:
+          name: Test
+          command: ci/windows/test.cmd
+          working_directory: zeek
 
   macos-build:
     parameters:
