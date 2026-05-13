@@ -37,6 +37,9 @@ jobs:
         type: string
       deps_script:
         type: string
+      resource_class:
+        type: string
+        default: large
     environment:
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
       ZEEK_CI_CPUS: 4
@@ -47,6 +50,7 @@ jobs:
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
     docker:
       - image: << parameters.docker_image >>
+    resource_class: << parameters.resource_class >>
     steps:
       - run:
           name: Install git
@@ -60,9 +64,10 @@ jobs:
           command: git submodule update --recursive --init
       - restore_cache:
           keys:
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - ccache-{{ .Environment.CIRCLE_JOB }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .arch }}-{{ .Revision }}
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
       - attach_workspace:
           at: .
       - run:
@@ -71,6 +76,7 @@ jobs:
       - run:
           name: Setup ccache
           command: |
+            set +e
             mkdir -p ~/.ccache
             ccache --set-config=max_size=2G
             ccache --set-config=compression=true
@@ -84,7 +90,7 @@ jobs:
           name: Show ccache statistics
           command: ccache --show-stats
       - save_cache:
-          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .arch }}-{{ .Revision }}
           paths:
             - ~/.ccache
       - run:
@@ -131,9 +137,9 @@ jobs:
       - restore_cache:
           name: Restore ccache
           keys:
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - ccache-{{ .Environment.CIRCLE_JOB }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
       - restore_cache:
           name: Restore vcpkg cache
           keys:
@@ -165,7 +171,7 @@ jobs:
           command: ci\windows\build.cmd
           working_directory: zeek
       - save_cache:
-          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - C:\tmp\zeek-ccache
       - run:
@@ -179,12 +185,17 @@ jobs:
         type: string
     environment:
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
+      # This is based on the size of the m4pro.medium runner, as specified in Circle's docs at
+      # https://circleci.com/docs/guides/execution-managed/using-macos/#available-resource-classes.
       ZEEK_CI_CPUS: 6
       ZEEK_CI_BTEST_JOBS: 6
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: macos
       ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}
     macos:
+      # TODO: should this be a parameter? Do we care to test on other Xcode versions other than the
+      # latest? See https://circleci.com/docs/guides/execution-managed/using-macos/#supported-xcode-versions-silicon
+      # for other options.
       xcode: 26.5.0
     resource_class: m4pro.medium
     steps:
@@ -198,9 +209,9 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
-            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - ccache-{{ .Environment.CIRCLE_JOB }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
       - attach_workspace:
           at: .
       - run:
@@ -209,6 +220,7 @@ jobs:
       - run:
           name: Setup ccache
           command: |
+            set +e
             mkdir -p ~/.ccache
             ccache --set-config=max_size=2G
             ccache --set-config=compression=true
@@ -223,7 +235,7 @@ jobs:
           command: ccache --show-stats
       - save_cache:
           name: Save ccache directory
-          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - ~/.ccache
       - run:
@@ -264,8 +276,16 @@ workflows:
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
           requires: [fetch-test-traces]
+      - linux-build:
+          name: arm-ubuntu-24.04
+          git_install: apt update && apt install -y git
+          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          resource_class: arm.large
+          requires: [fetch-test-traces]
       - windows-build
       - macos-build:
-          name: Xcode 26.5
+          name: macOS-xcode-26.5
           configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           requires: [fetch-test-traces]
