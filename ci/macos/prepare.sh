@@ -6,8 +6,7 @@ set -e
 set -x
 
 brew update
-brew upgrade cmake
-brew install cppzmq openssl@3 python@3 swig bison flex ccache libmaxminddb dnsmasq krb5 node@24
+brew install cmake cppzmq openssl@3 python@3 swig bison flex ccache libmaxminddb dnsmasq krb5 node@24
 
 which python3
 python3 --version

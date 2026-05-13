@@ -3,6 +3,10 @@ version: 2.1
 orbs:
   win: circleci/windows@5.1.1
 
+environment:
+  ZEEK_CI: Circle
+  ZEEK_TEST_ULIMIT_OPEN_FILES: 256
+
 jobs:
   linux-build:
     parameters:
@@ -15,13 +19,11 @@ jobs:
       deps_script:
         type: string
     environment:
-      ZEEK_CI: Circle
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
       ZEEK_CI_CPUS: 4
       ZEEK_CI_BTEST_JOBS: 2
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: linux
-      ZEEK_TEST_ULIMIT_OPEN_FILES: 256
       ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
     docker:
       - image: << parameters.docker_image >>
@@ -81,8 +83,7 @@ jobs:
       ZEEK_CI_CPUS: 4
       ZEEK_CI_BTEST_JOBS: 2
       ZEEK_CI_BTEST_RETRIES: 2
-      ZEEK_CI_RUNNER_OS: linux
-      ZEEK_TEST_ULIMIT_OPEN_FILES: 256
+      ZEEK_CI_RUNNER_OS: windows
       ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
     executor:
       name: win/server-2022
@@ -153,6 +154,74 @@ jobs:
           paths:
             - C:\tmp\zeek-ccache
 
+  macos-build:
+    parameters:
+      configure:
+        type: string
+    environment:
+      ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
+      ZEEK_CI_CPUS: 6
+      ZEEK_CI_BTEST_JOBS: 6
+      ZEEK_CI_BTEST_RETRIES: 2
+      ZEEK_CI_RUNNER_OS: macos
+      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
+    macos:
+      xcode: 26.5.0
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: ci/macos/prepare.sh
+      - run:
+          name: Update submodules
+          command: git submodule update --recursive --init
+      - restore_cache:
+          name: Restore ccache directory
+          keys:
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+            - ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
+            - ccache-{{ .Environment.CIRCLE_JOB }}-
+      # - restore_cache:
+      #     name: Restore external test traces cache
+      #     keys:
+      #       - zeek-testing-traces
+      #     working_directory: zeek
+      - run:
+          name: Initialize external testing repos
+          command: ci/init-external-repos.sh
+      # - save_cache:
+      #     name: Save external test traces cache
+      #     key: zeek-testing-traces
+      #     paths:
+      #       - testing/external/zeek-testing-traces
+      - run:
+          name: Setup ccache
+          command: |
+            mkdir -p ~/.ccache
+            ccache --set-config=max_size=2G
+            ccache --set-config=compression=true
+            ccache --zero-stats
+            ccache --show-stats
+      - run:
+          name: Build
+          command: ci/build.sh
+          environment:
+      - run:
+          name: Show ccache statistics
+          command: ccache --show-stats
+      - save_cache:
+          name: Save ccache directory
+          key: ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ~/.ccache
+      - run:
+          name: Test
+          command: ci/test.sh
+      - store_test_results:
+          name: Store btest results
+          path: btest-results
+
 workflows:
   # build-and-test:
   #   when:
@@ -183,3 +252,6 @@ workflows:
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
       - windows-build
+      - macos-build:
+          name: Xcode 26.5
+          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
