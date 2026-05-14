@@ -31,9 +31,6 @@ jobs:
     parameters:
       git_install:
         type: string
-      configure:
-        type: string
-        default: --build-type=release --disable-broker-tests --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
       docker_image:
         type: string
       deps_script:
@@ -41,13 +38,28 @@ jobs:
       resource_class:
         type: string
         default: large
+      configure_flags:
+        type: string
+        default: --build-type=release --disable-broker-tests --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
+      extra_env:
+        type: string
+        default: ""
+      enable_tests:
+        type: boolean
+        default: true
+      enable_benchmarks:
+        # TODO: create the benchmarker steps
+        type: boolean
+        default: true
     environment:
-      ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
+      ZEEK_CI: 1
+      ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure_flags >>
       ZEEK_CI_CPUS: 4
-      ZEEK_CI_BTEST_JOBS: 2
+      ZEEK_CI_BTEST_JOBS: 4
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: linux
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
+      ZEEK_CIRCLE_EXTRA_ENV: << parameters.extra_env >>
     docker:
       - image: << parameters.docker_image >>
     resource_class: << parameters.resource_class >>
@@ -56,6 +68,10 @@ jobs:
           name: Set extra environment variables
           command: |
             echo "export ZEEK_CI_WORKING_DIR=${CIRCLE_WORKING_DIRECTORY}" >> "$BASH_ENV"
+            IFS=$'\n'
+            for line in ${ZEEK_CIRCLE_EXTRA_ENV}; do
+              echo "export ${line}" >> "$BASH_ENV"
+            done
       - run:
           name: Install git
           command: << parameters.git_install >>
@@ -96,14 +112,18 @@ jobs:
           key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - ~/.ccache
-      - run:
-          name: Test
-          command: ci/test.sh
-      - store_test_results:
-          path: btest-results
+      - when:
+          condition: << parameters.enable_tests >>
+          steps:
+            - run:
+                name: Test
+                command: ci/test.sh
+            - store_test_results:
+                path: btest-results
 
   windows-build:
     environment:
+      ZEEK_CI: 1
       ZEEK_CI_CPUS: 4
       ZEEK_CI_BTEST_JOBS: 2
       ZEEK_CI_BTEST_RETRIES: 2
@@ -186,8 +206,9 @@ jobs:
     parameters:
       configure:
         type: string
-        default: --build-type=release --disable-broker-tests --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
+        default: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror --with-krb5=/opt/homebrew/opt/krb5 -D NODEJS_ROOT_DIR=/opt/homebrew/opt/node@24
     environment:
+      ZEEK_CI: 1
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
       # This is based on the size of the m4pro.medium runner, as specified in Circle's docs at
       # https://circleci.com/docs/guides/execution-managed/using-macos/#available-resource-classes.
@@ -276,11 +297,23 @@ workflows:
       equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
     jobs:
       - fetch-test-traces
+      - macos-build:
+          name: macOS-xcode-26.5
+          requires: [fetch-test-traces]
+      - macos-build:
+          name: macOS-xcode-16.4
+          requires: [fetch-test-traces]
       - linux-build:
-          name: ubuntu-24.04
+          name: alpine
+          git_install: apk add --no-cache git
+          deps_script: ci/alpine/install_dependencies.sh
+          docker_image: alpine:latest
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: debian-12
           git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
+          deps_script: ci/debian-12/install_dependencies.sh
+          docker_image: debian:12
           requires: [fetch-test-traces]
       - linux-build:
           name: debian-13
@@ -296,13 +329,117 @@ workflows:
           resource_class: arm.large
           requires: [fetch-test-traces]
       - linux-build:
-          name: debian-13-static
+          name: debian-13-binary
           git_install: apt update && apt install -y git
-          configure: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
           deps_script: ci/debian-13/install_dependencies.sh
           docker_image: debian:13
+          resource_class: arm.large
+          configure_flags:  --prefix=$CIRRUS_WORKING_DIR/install --libdir=$CIRRUS_WORKING_DIR/install/lib --binary-package --enable-static-broker --enable-static-binpac --disable-broker-tests --build-type=Release --ccache --enable-werror
           requires: [fetch-test-traces]
-      - windows-build
-      - macos-build:
-          name: macOS-xcode-26.5
+      - linux-build:
+          name: debian-13-static
+          git_install: apt update && apt install -y git
+          deps_script: ci/debian-13/install_dependencies.sh
+          docker_image: debian:13
+          configure_flags: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=${WORKING_DIR}/install --ccache --enable-werror
           requires: [fetch-test-traces]
+      - linux-build:
+          name: fedora-43
+          git_install: dnf install -y git
+          deps_script: ci/fedora-43/install_dependencies.sh
+          docker_image: fedora:43
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: fedora-44
+          git_install: dnf install -y git
+          deps_script: ci/fedora-44/install_dependencies.sh
+          docker_image: fedora:44
+          configure_flags:  --prefix=$CIRRUS_WORKING_DIR/install --libdir=$CIRRUS_WORKING_DIR/install/lib --binary-package --enable-static-broker --enable-static-binpac --disable-broker-tests --build-type=Release --ccache --enable-werror
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: opensuse-leap-16.0
+          git_install: zypper refresh && zypper in -y git
+          deps_script: ci/opensuse-leap-16.0/install_dependencies.sh
+          docker_image: opensuse/leap:16.0
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: opensuse-tumbleweed
+          git_install: zypper refresh && zypper in -y git
+          deps_script: ci/opensuse-tumbleweed/install_dependencies.sh
+          docker_image: opensuse/tumbleweed:latest
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: ubuntu-22.04
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-22.04/install_dependencies.sh
+          docker_image: ubuntu:22.04
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: ubuntu-24.04
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          requires: [fetch-test-traces]
+          extra_env: |
+            ZEEK_CI_CREATE_ARTIFACT=1
+          enable_benchmarks: true
+      - linux-build:
+          name: ubuntu-24.04-clang-libcpp
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          requires: [fetch-test-traces]
+          extra_env: |
+            CC="clang-19"
+            CXX="clang++-19"
+            CXXFLAGS="-stdlib=libc++"
+            ZEEK_CI_CONFIGURE_FLAGS_EXTRA="--disable-javascript"
+      - linux-build:
+          name: ubuntu-24.04-clang-tidy
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          configure_flags: --build-type=debug --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror --enable-clang-tidy
+          requires: [fetch-test-traces]
+          extra_env: |
+            CC="clang-19"
+            CXX="clang++-19"
+          enable_tests: false
+      - linux-build:
+          name: ubuntu-24.04-spicy
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          configure_flags: --build-type=release --disable-broker-tests --enable-spicy-ssl --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
+          requires: [fetch-test-traces]
+          extra_env: |
+            ZEEK_CI_CREATE_ARTIFACT=1
+            ZEEK_CI_PREBUILD_COMMAND="cd auxil/spicy && git fetch && git reset --hard origin/main && git submodule update --init --recursive"
+          # TODO: spicy install analyzers script
+          enable_benchmarks: true
+      - linux-build:
+          name: ubuntu-24.04-spicy-head
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          requires: [fetch-test-traces]
+          # TODO: spicy install analyzers script
+          enable_benchmarks: true
+      - linux-build:
+          name: ubuntu-24.04-zam
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-24.04/install_dependencies.sh
+          docker_image: ubuntu:24.04
+          requires: [fetch-test-traces]
+          extra_env: |
+            ZEEK_CI_SKIP_UNIT_TESTS=1
+            ZEEK_CI_SKIP_EXTERNAL_BTESTS=1
+            ZEEK_CI_BTEST_EXTRA_ARGS="-a zam"
+            ZEEK_CI_BTEST_JOBS=3
+      - linux-build:
+          name: ubuntu-26.04
+          git_install: apt update && apt install -y git
+          deps_script: ci/ubuntu-26.04/install_dependencies.sh
+          docker_image: ubuntu:26.04
+          requires: [fetch-test-traces]
+#      - windows-build

@@ -6,10 +6,10 @@
 # artifact upload happens.
 set -eux
 
-test -d ${CIRRUS_WORKING_DIR}/install
+test -d ${ZEEK_CI_WORKING_DIR}/install
 
 # Install prefix
-PREFIX=${CIRRUS_WORKING_DIR}/install
+PREFIX=${ZEEK_CI_WORKING_DIR}/install
 
 export PATH=$PREFIX/bin:$PATH
 
@@ -27,4 +27,4 @@ done
 # After installing analyzers, package up build.tgz (representing
 # the contents of the installation directory). This overwrites any
 # existing artifact created by build.sh
-tar -czf ${CIRRUS_WORKING_DIR}/build.tgz ${CIRRUS_WORKING_DIR}/install
+tar -czf ${ZEEK_CI_WORKING_DIR}/build.tgz ${ZEEK_CI_WORKING_DIR}/install
