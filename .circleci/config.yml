@@ -33,6 +33,7 @@ jobs:
         type: string
       configure:
         type: string
+        default: --build-type=release --disable-broker-tests --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
       docker_image:
         type: string
       deps_script:
@@ -64,10 +65,9 @@ jobs:
           command: git submodule update --recursive --init
       - restore_cache:
           keys:
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .arch }}-{{ .Revision }}
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-{{ .Revision }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-
       - attach_workspace:
           at: .
       - run:
@@ -90,7 +90,7 @@ jobs:
           name: Show ccache statistics
           command: ccache --show-stats
       - save_cache:
-          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .arch }}-{{ .Revision }}
+          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - ~/.ccache
       - run:
@@ -183,6 +183,7 @@ jobs:
     parameters:
       configure:
         type: string
+        default: --build-type=release --disable-broker-tests --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
     environment:
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
       # This is based on the size of the m4pro.medium runner, as specified in Circle's docs at
@@ -272,20 +273,30 @@ workflows:
       - linux-build:
           name: ubuntu-24.04
           git_install: apt update && apt install -y git
-          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
           requires: [fetch-test-traces]
       - linux-build:
-          name: arm-ubuntu-24.04
+          name: debian-13
           git_install: apt update && apt install -y git
-          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
+          deps_script: ci/debian-13/install_dependencies.sh
+          docker_image: debian:13
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: debian-13-arm
+          git_install: apt update && apt install -y git
+          deps_script: ci/debian-13/install_dependencies.sh
+          docker_image: debian:13
           resource_class: arm.large
+          requires: [fetch-test-traces]
+      - linux-build:
+          name: debian-13-static
+          git_install: apt update && apt install -y git
+          configure: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
+          deps_script: ci/debian-13/install_dependencies.sh
+          docker_image: debian:13
           requires: [fetch-test-traces]
       - windows-build
       - macos-build:
           name: macOS-xcode-26.5
-          configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           requires: [fetch-test-traces]
