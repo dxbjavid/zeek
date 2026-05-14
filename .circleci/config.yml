@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   win: circleci/windows@5.1.1
+  docker: circleci/docker@3.0.1
 
 jobs:
   # Fetches the zeek-testing test traces either from a cache or the remote host
@@ -27,13 +28,81 @@ jobs:
           paths:
             - testing/external/zeek-testing-traces
 
+  create-build-image:
+    parameters:
+      build_arm:
+        type: boolean
+        default: false
+    docker:
+      - image: cimg/base:current
+    resource_class: medium
+    steps:
+      # TODO: this whole thing could probably move into a script in the ci directory
+      # TODO: Add a step to flush old images out of the cache. Maybe loop through what's
+      # available for each image name and keep the last three versions?
+      - checkout
+      - run:
+          name: Set extra environment variables
+          command: |
+            set +e
+            if << parameters.build_arm >>; then
+              echo "export PLATFORMS='linux/amd64,linux/arm64'" >> "$BASH_ENV"
+            else
+              echo "export PLATFORMS='linux/amd64'" >> "$BASH_ENV"
+            fi
+
+            IMAGE_NAME=$(echo $CIRCLE_JOB | cut -d- -f 3-)
+            DOCKERFILE_PATH=ci/$IMAGE_NAME/Dockerfile
+            IMAGE_VERSION=$(awk -F= '/DOCKERFILE_VERSION/ {print $2}' $DOCKERFILE_PATH)
+
+            echo "export IMAGE_NAME=$IMAGE_NAME" >> "$BASH_ENV"
+            echo "export DOCKERFILE_PATH=$DOCKERFILE_PATH" >> "$BASH_ENV"
+            echo "export IMAGE_VERSION=$IMAGE_VERSION" >> "$BASH_ENV"
+            echo "export FULL_IMAGE_TAG=zeek/zeek-ci:$IMAGE_NAME-$IMAGE_VERSION" >> "$BASH_ENV"
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Set up Docker Buildx
+          command: |
+            docker buildx create --use --name multiarch-builder --driver docker-container
+            docker buildx inspect --bootstrap
+      - run:
+          name: Log in to Docker Hub
+          command: echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_LOGIN" --password-stdin
+      - run:
+          name: Check if image exists remotely
+          command: |
+            set +e
+            if << parameters.build_arm >>; then
+               NUM_LINES=$(docker manifest inspect $FULL_IMAGE_TAG 2>/dev/null | grep -c -E "amd64|arm64")
+               if [ $NUM_LINES -eq 2 ]; then
+                 echo "Both amd64 and arm64 images already exist for $FULL_IMAGE_TAG, exiting"
+                 circleci-agent step halt
+               else
+                 echo "Either amd64 or arm64 images are missing from $FULL_IMAGE_TAG, continuing with build"
+               fi
+            else
+               NUM_LINES=$(docker manifest inspect $FULL_IMAGE_TAG 2>/dev/null | grep -c -E "amd64")
+               if [ $NUM_LINES -eq 1 ]; then
+                 echo "$FULL_IMAGE_TAG already exists, exiting"
+                 circleci-agent step halt
+               else
+                 echo "$FULL_IMAGE_TAG is missing, continuing with build"
+               fi
+            fi
+      - run:
+          name: Build and push multi-arch image
+          command: |
+            docker buildx build \
+              --platform $PLATFORMS \
+              --file $DOCKERFILE_PATH \
+              --tag $FULL_IMAGE_TAG \
+              --push \
+              .
+
   linux-build:
     parameters:
-      git_install:
-        type: string
       docker_image:
-        type: string
-      deps_script:
         type: string
       resource_class:
         type: string
@@ -66,6 +135,9 @@ jobs:
       ZEEK_CI_CREATE_ARTIFACT: << parameters.enable_benchmarks >>
     docker:
       - image: << parameters.docker_image >>
+        auth:
+          username: $DOCKER_LOGIN
+          password: $DOCKER_PASSWORD
     resource_class: << parameters.resource_class >>
     steps:
       - run:
@@ -76,13 +148,7 @@ jobs:
             for line in ${ZEEK_CIRCLE_EXTRA_ENV}; do
               echo "export ${line}" >> "$BASH_ENV"
             done
-      - run:
-          name: Install git
-          command: << parameters.git_install >>
       - checkout
-      - run:
-          name: Install dependencies
-          command: << parameters.deps_script >>
       - run:
           name: Update submodules
           command: git submodule update --recursive --init
@@ -293,29 +359,63 @@ jobs:
           path: btest-results
 
 workflows:
-  # build-and-test:
-  #   when:
-  #     not:
-  #       equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
-  #   jobs:
-      # - windows-build
+  image-build-testing:
+    when:
+      equal: [ "circleci-project-setup-disabled", << pipeline.git.branch >> ]
+    jobs:
+      # - fetch-test-traces
+      # - create-build-image:
+      #     name: ubuntu-24.04-image
+      #     image_name: ubuntu-24.04
+      #     dockerfile_path: ci/ubuntu-24.04
+      - create-build-image:
+          name: build-image-ubuntu-26.04
+          build_arm: false
+      # - create-build-image:
+      #     name: debian-13-image
+      #     image_name: debian-13
+      #     dockerfile_path: ci/debian-13
       # - linux-build:
       #     name: ubuntu-24.04
-      #     git_install: apt update && apt install -y git
-      #     configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
-      #     deps_script: ci/ubuntu-24.04/install_dependencies.sh
-      #     docker_image: ubuntu:24.04
-      # - linux-build:
-      #     name: fedora-43
-      #     git_install: dnf -y install git
-      #     configure: --build-type=release --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
-      #     deps_script: ci/fedora-43/install_dependencies.sh
-      #     docker_image: fedora:43
+      #     docker_image: zeek/zeek-ci:ubuntu-24.04-20251125
+      #     requires: [fetch-test-traces, ubuntu-24.04-image]
+      #     enable_benchmarks: true
+
   circleci-config-testing:
     when:
       equal: [ "circleci-project-setup", << pipeline.git.branch >> ]
     jobs:
       - fetch-test-traces
+
+      # The job name is split up and used to map to the Dockerfile and final image
+      # name. Everything after "build-image-" should map to a directory in the ci
+      # directory in the repo.
+      - create-build-image:
+          name: build-image-alpine
+      - create-build-image:
+          name: build-image-centos-stream-9
+      - create-build-image:
+          name: build-image-centos-stream-10
+      - create-build-image:
+          name: build-image-debian-12
+      - create-build-image:
+          name: build-image-debian-13
+          build_arm: true
+      - create-build-image:
+          name: build-image-fedora-43
+      - create-build-image:
+          name: build-image-fedora-44
+      - create-build-image:
+          name: build-image-opensuse-leap-16.0
+      - create-build-image:
+          name: build-image-opensuse-tumbleweed
+      - create-build-image:
+          name: build-image-ubuntu-22.04
+      - create-build-image:
+          name: build-image-ubuntu-24.04
+      - create-build-image:
+          name: build-image-ubuntu-26.04
+
       - macos-build:
           name: macOS-xcode-26.5
           requires: [fetch-test-traces]
@@ -324,88 +424,69 @@ workflows:
           requires: [fetch-test-traces]
       - linux-build:
           name: alpine
-          git_install: apk add --no-cache git
-          deps_script: ci/alpine/install_dependencies.sh
-          docker_image: alpine:latest
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:alpine-20260515
+          requires: [fetch-test-traces, build-image-alpine]
+      - linux-build:
+          name: centos-stream-9
+          docker_image: zeek/zeek-ci:centos-stream-9-20260515
+          requires: [fetch-test-traces, build-image-centos-stream-9]
+      - linux-build:
+          name: centos-stream-10
+          docker_image: zeek/zeek-ci:centos-stream-10-20260515
+          requires: [fetch-test-traces, build-image-centos-stream-10]
       - linux-build:
           name: debian-12
-          git_install: apt update && apt install -y git
-          deps_script: ci/debian-12/install_dependencies.sh
-          docker_image: debian:12
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:debian-12-20260515
+          requires: [fetch-test-traces, build-image-debian-12]
       - linux-build:
           name: debian-13
-          git_install: apt update && apt install -y git
-          deps_script: ci/debian-13/install_dependencies.sh
-          docker_image: debian:13
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:debian-13-20260515
+          requires: [fetch-test-traces, build-image-debian-13]
       - linux-build:
           name: debian-13-arm
-          git_install: apt update && apt install -y git
-          deps_script: ci/debian-13/install_dependencies.sh
-          docker_image: debian:13
+          docker_image: zeek/zeek-ci:debian-13-20260515
           resource_class: arm.large
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-debian-13]
       - linux-build:
           name: debian-13-binary
-          git_install: apt update && apt install -y git
-          deps_script: ci/debian-13/install_dependencies.sh
-          docker_image: debian:13
-          resource_class: arm.large
+          docker_image: zeek/zeek-ci:debian-13-20260515
           configure_flags:  --prefix=$CIRRUS_WORKING_DIR/install --libdir=$CIRRUS_WORKING_DIR/install/lib --binary-package --enable-static-broker --enable-static-binpac --disable-broker-tests --build-type=Release --ccache --enable-werror
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-debian-13]
       - linux-build:
           name: debian-13-static
-          git_install: apt update && apt install -y git
-          deps_script: ci/debian-13/install_dependencies.sh
-          docker_image: debian:13
+          docker_image: zeek/zeek-ci:debian-13-20260515
           configure_flags: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=${WORKING_DIR}/install --ccache --enable-werror
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-debian-13]
       - linux-build:
           name: fedora-43
-          git_install: dnf install -y git
-          deps_script: ci/fedora-43/install_dependencies.sh
-          docker_image: fedora:43
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:fedora-43-20260515
+          requires: [fetch-test-traces, build-image-fedora-43]
       - linux-build:
           name: fedora-44
-          git_install: dnf install -y git
-          deps_script: ci/fedora-44/install_dependencies.sh
-          docker_image: fedora:44
+          docker_image: zeek/zeek-ci:fedora-44-20260515
           configure_flags:  --prefix=$CIRRUS_WORKING_DIR/install --libdir=$CIRRUS_WORKING_DIR/install/lib --binary-package --enable-static-broker --enable-static-binpac --disable-broker-tests --build-type=Release --ccache --enable-werror
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-fedora-44]
       - linux-build:
           name: opensuse-leap-16.0
-          git_install: zypper refresh && zypper in -y git
-          deps_script: ci/opensuse-leap-16.0/install_dependencies.sh
-          docker_image: opensuse/leap:16.0
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:opensuse-leap-16.0-20260515
+          requires: [fetch-test-traces, build-image-opensuse-leap-16.0]
       - linux-build:
           name: opensuse-tumbleweed
-          git_install: zypper refresh && zypper in -y git
-          deps_script: ci/opensuse-tumbleweed/install_dependencies.sh
-          docker_image: opensuse/tumbleweed:latest
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:opensuse-tumbleweed-20260515
+          requires: [fetch-test-traces, build-image-opensuse-tumbleweed]
       - linux-build:
           name: ubuntu-22.04
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-22.04/install_dependencies.sh
-          docker_image: ubuntu:22.04
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:ubuntu-22.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-22.04]
       - linux-build:
           name: ubuntu-24.04
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-clang-libcpp
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           extra_env: |
             CC="clang-19"
             CXX="clang++-19"
@@ -413,40 +494,32 @@ workflows:
             ZEEK_CI_CONFIGURE_FLAGS_EXTRA="--disable-javascript"
       - linux-build:
           name: ubuntu-24.04-clang-tidy
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
           configure_flags: --build-type=debug --disable-broker-tests --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror --enable-clang-tidy
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           extra_env: |
             CC="clang-19"
             CXX="clang++-19"
           enable_tests: false
       - linux-build:
           name: ubuntu-24.04-spicy
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
           configure_flags: --build-type=release --disable-broker-tests --enable-spicy-ssl --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
-          requires: [fetch-test-traces]
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           extra_env: |
             ZEEK_CI_PREBUILD_COMMAND="cd auxil/spicy && git fetch && git reset --hard origin/main && git submodule update --init --recursive"
           install_spicy_analyzers: true
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-spicy-head
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           install_spicy_analyzers: true
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-zam
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-24.04/install_dependencies.sh
-          docker_image: ubuntu:24.04
-          requires: [fetch-test-traces]
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
           extra_env: |
             ZEEK_CI_SKIP_UNIT_TESTS=1
             ZEEK_CI_SKIP_EXTERNAL_BTESTS=1
@@ -454,8 +527,6 @@ workflows:
             ZEEK_CI_BTEST_JOBS=3
       - linux-build:
           name: ubuntu-26.04
-          git_install: apt update && apt install -y git
-          deps_script: ci/ubuntu-26.04/install_dependencies.sh
-          docker_image: ubuntu:26.04
-          requires: [fetch-test-traces]
-#      - windows-build
+          docker_image: zeek/zeek-ci:ubuntu-26.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-26.04]
+      - windows-build
