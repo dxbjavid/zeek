@@ -50,7 +50,10 @@ jobs:
       enable_benchmarks:
         # TODO: create the benchmarker steps
         type: boolean
-        default: true
+        default: false
+      install_spicy_analyzers:
+        type: boolean
+        default: false
     environment:
       ZEEK_CI: 1
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure_flags >>
@@ -60,6 +63,7 @@ jobs:
       ZEEK_CI_RUNNER_OS: linux
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
       ZEEK_CIRCLE_EXTRA_ENV: << parameters.extra_env >>
+      ZEEK_CI_CREATE_ARTIFACT: << parameters.enable_benchmarks >>
     docker:
       - image: << parameters.docker_image >>
     resource_class: << parameters.resource_class >>
@@ -120,6 +124,21 @@ jobs:
                 command: ci/test.sh
             - store_test_results:
                 path: btest-results
+      - when:
+          condition: << parameters.install_spicy_analyzers >>
+          steps:
+            - run:
+                name: Install spicy analyzers
+                command: ci/spicy-install-analyzers.sh
+      - when:
+          condition: << parameters.enable_benchmarks >>
+          steps:
+            - store_artifacts:
+                path: build.tgz
+                destination: build
+            - run:
+                name: Run benchmarks
+                command: ci/benchmark.sh
 
   windows-build:
     environment:
@@ -380,8 +399,6 @@ workflows:
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
           requires: [fetch-test-traces]
-          extra_env: |
-            ZEEK_CI_CREATE_ARTIFACT=1
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-clang-libcpp
@@ -413,9 +430,8 @@ workflows:
           configure_flags: --build-type=release --disable-broker-tests --enable-spicy-ssl --prefix=$CIRRUS_WORKING_DIR/install --ccache --enable-werror
           requires: [fetch-test-traces]
           extra_env: |
-            ZEEK_CI_CREATE_ARTIFACT=1
             ZEEK_CI_PREBUILD_COMMAND="cd auxil/spicy && git fetch && git reset --hard origin/main && git submodule update --init --recursive"
-          # TODO: spicy install analyzers script
+          install_spicy_analyzers: true
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-spicy-head
@@ -423,7 +439,7 @@ workflows:
           deps_script: ci/ubuntu-24.04/install_dependencies.sh
           docker_image: ubuntu:24.04
           requires: [fetch-test-traces]
-          # TODO: spicy install analyzers script
+          install_spicy_analyzers: true
           enable_benchmarks: true
       - linux-build:
           name: ubuntu-24.04-zam
