@@ -33,7 +33,7 @@ jobs:
         type: string
       configure:
         type: string
-        default: --build-type=release --disable-broker-tests --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
+        default: --build-type=release --disable-broker-tests --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
       docker_image:
         type: string
       deps_script:
@@ -47,12 +47,15 @@ jobs:
       ZEEK_CI_BTEST_JOBS: 2
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: linux
-      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}/${CIRCLE_PROJECT_REPONAME}
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
     docker:
       - image: << parameters.docker_image >>
     resource_class: << parameters.resource_class >>
     steps:
+      - run:
+          name: Set extra environment variables
+          command: |
+            echo "export ZEEK_CI_WORKING_DIR=${CIRCLE_WORKING_DIRECTORY}" >> "$BASH_ENV"
       - run:
           name: Install git
           command: << parameters.git_install >>
@@ -65,9 +68,9 @@ jobs:
           command: git submodule update --recursive --init
       - restore_cache:
           keys:
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-{{ .Revision }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-
+            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
       - attach_workspace:
           at: .
       - run:
@@ -90,7 +93,7 @@ jobs:
           name: Show ccache statistics
           command: ccache --show-stats
       - save_cache:
-          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .arch }}-{{ .Branch }}-{{ .Revision }}
+          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - ~/.ccache
       - run:
@@ -183,7 +186,7 @@ jobs:
     parameters:
       configure:
         type: string
-        default: --build-type=release --disable-broker-tests --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
+        default: --build-type=release --disable-broker-tests --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
     environment:
       ZEEK_CI_CONFIGURE_FLAGS: << parameters.configure >>
       # This is based on the size of the m4pro.medium runner, as specified in Circle's docs at
@@ -192,7 +195,6 @@ jobs:
       ZEEK_CI_BTEST_JOBS: 6
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: macos
-      ZEEK_CI_WORKING_DIR: ${CIRCLE_WORKING_DIRECTORY}
     macos:
       # TODO: should this be a parameter? Do we care to test on other Xcode versions other than the
       # latest? See https://circleci.com/docs/guides/execution-managed/using-macos/#supported-xcode-versions-silicon
@@ -200,6 +202,10 @@ jobs:
       xcode: 26.5.0
     resource_class: m4pro.medium
     steps:
+      - run:
+          name: Set extra environment variables
+          command: |
+            echo "export ZEEK_CI_WORKING_DIR=${CIRCLE_WORKING_DIRECTORY}" >> "$BASH_ENV"
       - checkout
       - run:
           name: Install dependencies
@@ -292,7 +298,7 @@ workflows:
       - linux-build:
           name: debian-13-static
           git_install: apt update && apt install -y git
-          configure: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=$ZEEK_CI_WORKING_DIR/install --ccache --enable-werror
+          configure: --build-type=release --disable-broker-tests --enable-static-broker --enable-static-binpac --prefix=${ZEEK_CI_WORKING_DIR}/install --ccache --enable-werror
           deps_script: ci/debian-13/install_dependencies.sh
           docker_image: debian:13
           requires: [fetch-test-traces]
