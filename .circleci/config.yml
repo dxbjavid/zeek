@@ -153,11 +153,13 @@ jobs:
           name: Update submodules
           command: git submodule update --recursive --init
       - restore_cache:
+          name: Restore ccache directory
           keys:
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}-
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
       - attach_workspace:
+          name: Attach workspace with zeek-testing pcaps
           at: .
       - run:
           name: Initialize external testing repos
@@ -179,6 +181,7 @@ jobs:
           name: Show ccache statistics
           command: ccache --show-stats
       - save_cache:
+          name: Save ccache directory
           key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - ~/.ccache
@@ -243,7 +246,7 @@ jobs:
           shell: cmd.exe
           working_directory: zeek
       - restore_cache:
-          name: Restore ccache
+          name: Restore ccache directory
           keys:
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
@@ -279,6 +282,7 @@ jobs:
           command: ci\windows\build.cmd
           working_directory: zeek
       - save_cache:
+          name: Save ccache directory
           key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - C:\tmp\zeek-ccache
@@ -326,6 +330,7 @@ jobs:
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
             - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
       - attach_workspace:
+          name: Attach workspace with zeek-testing pcaps
           at: .
       - run:
           name: Initialize external testing repos
