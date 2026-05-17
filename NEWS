@@ -11,6 +11,12 @@ We'd like to thank ... their contributions to this release.
 Breaking Changes
 ----------------
 
+- Removed Broker's legacy embedded WebSocket server. Zeek no longer exposes
+  ``Broker::BrokerProtocol``, or the script options ``Broker::default_port_websocket``,
+  ``Broker::default_listen_address_websocket``, ``Broker::web_socket_buffer_size``,
+  and ``Broker::web_socket_overflow_policy``. Use :zeek:see:`Cluster::listen_websocket`
+  and the ``ZEEK_WEBSOCKET_*`` environment variables for WebSocket serving instead.
+
 New Functionality
 -----------------
 
