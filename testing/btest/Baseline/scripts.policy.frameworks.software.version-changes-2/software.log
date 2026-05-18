@@ -10,4 +10,9 @@
 XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	0	0	-	-	my_fake_software 1.0.0
 XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	1	0	-	-	my_fake_software 1.1.0
 XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	2	0	-	-	my_fake_software 1.2.0
+XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	0	0	-	-	my_fake_software 1.0.0
+XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	1	0	-	-	my_fake_software 1.1.0
+XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	2	0	-	-	my_fake_software 1.2.0
+XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	0	0	-	-	my_fake_software 1.0.0
+XXXXXXXXXX.XXXXXX	127.0.0.1	-	Software::UNKNOWN	my_fake_software	1	1	0	-	-	my_fake_software 1.1.0
 #close XXXX-XX-XX-XX-XX-XX

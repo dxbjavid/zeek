@@ -2,6 +2,7 @@
 # @TEST-EXEC: btest-diff software.log
 # @TEST-EXEC: TEST_DIFF_CANONIFIER=$SCRIPTS/diff-remove-timestamps btest-diff notice.log
 
+# @TEST-START-FILE common.zeek
 @load base/frameworks/software
 @load policy/frameworks/software/version-changes
 
@@ -37,3 +38,13 @@ event zeek_init()
 	{
 	event new_software();
 	}
+# @TEST-END-FILE
+
+@load ./common.zeek
+
+# @TEST-START-NEXT
+# Disable the hit suppression on the workers -- this is the historical behavior.
+
+@load ./common.zeek
+
+redef Software::found_cache_interval = 0secs;
