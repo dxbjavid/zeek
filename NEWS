@@ -1,4 +1,3 @@
-
 This document summarizes the most important changes in the current Zeek
 release. For an exhaustive list of changes, see the ``CHANGES`` file
 (note that submodules, such as Broker, come with their own ``CHANGES``.)
@@ -65,6 +64,15 @@ Changed Functionality
   ``host_store_backend_options``. By default it uses an SQLite backend, with the file
   stored in a directory under ``Cluster::default_store_dir``. Similar options are
   available for certs and services as well.
+
+- The software framework features improved control over version findings. The existing
+  parse cache, mapping unparsed versions to ``Software::Version`` records, now features
+  configurable expiration times via the ``Software::parse_cache_interval`` setting.
+
+  A new cache filters found versions on the workers, preventing them from repeatedly
+  reporting the same version in rapid succession. This cache's lifetime is configurable
+  via the ``Software::found_cache_interval`` setting, and defaults to 10 minutes. To disable
+  the cache and restore historical behavior, redefine this value to 0secs.
 
 Deprecated Functionality
 ------------------------
