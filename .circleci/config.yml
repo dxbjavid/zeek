@@ -24,10 +24,15 @@ commands:
             - run:
                 name: Initialize external testing repos
                 command: ci/init-external-repos.sh
+
   setup_ccache:
     parameters:
       max_size:
         type: string
+        default: 1000M
+      max_files:
+        type: integer
+        default: 20000
       path:
         type: string
     steps:
@@ -36,6 +41,7 @@ commands:
           command: |
             mkdir -p << parameters.path >>
             ccache --set-config=max_size=<< parameters.max_size >>
+            ccache --set-config=max_files=<< parameters.max_files >>
             ccache --set-config=compression=true
             ccache --set-config=cache_dir=<< parameters.path >>
             ccache --zero-stats
@@ -96,8 +102,7 @@ jobs:
             echo "export DOCKERFILE_PATH=$DOCKERFILE_PATH" >> "$BASH_ENV"
             echo "export IMAGE_VERSION=$IMAGE_VERSION" >> "$BASH_ENV"
             echo "export FULL_IMAGE_TAG=zeek/zeek-ci:$IMAGE_NAME-$IMAGE_VERSION" >> "$BASH_ENV"
-      - setup_remote_docker:
-          docker_layer_caching: true
+      - setup_remote_docker
       - run:
           name: Set up Docker Buildx
           command: |
@@ -172,6 +177,7 @@ jobs:
       ZEEK_TEST_ULIMIT_OPEN_FILES: 256
       ZEEK_CIRCLE_EXTRA_ENV: << parameters.extra_env >>
       ZEEK_CI_CREATE_ARTIFACT: << parameters.enable_benchmarks >>
+      ZEEK_CI_CCACHE_PRUNE_SIZE: 700M
     docker:
       - image: << parameters.docker_image >>
         auth:
@@ -191,21 +197,21 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
-          max_size: 2G
           path: ~/.ccache
       - run:
           name: Build
           command: ci/build.sh
       - run:
-          name: Show ccache statistics
-          command: ccache --show-stats
+          name: Show ccache statistics and prune
+          command: |
+            ccache --show-stats
+            CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}-{{ .Revision }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
           paths:
             - ~/.ccache
       - when:
@@ -244,6 +250,7 @@ jobs:
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: windows
       ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
+      ZEEK_CI_CCACHE_PRUNE_SIZE: 700M
     executor:
       name: win/server-2022
       size: large
@@ -267,24 +274,21 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
-          max_size: 2G
           path: C:\tmp\zeek-ccache
       - restore_cache:
           name: Restore vcpkg cache
           keys:
-            - vcpkg-{{ .Branch }}-{{ .Revision }}
-            - vcpkg-{{ .Branch }}-
+            - vcpkg-{{ .Branch }}
             - vcpkg-
       - run:
           name: Configure
           command: ci\windows\configure.cmd
       - save_cache:
           name: Saving vcpkg build cache
-          key: vcpkg-{{ .Branch }}-{{ .Revision }}
+          key: vcpkg-{{ .Branch }}
           paths:
             - zeek\auxil\vcpkg\installed
             - zeek\auxil\vcpkg\packages
@@ -292,9 +296,14 @@ jobs:
       - run:
           name: Build
           command: ci\windows\build.cmd
+      - run:
+          name: Show ccache statistics and prune
+          command: |
+            ccache --show-stats
+            CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
           paths:
             - C:\tmp\zeek-ccache
       - run:
@@ -317,6 +326,7 @@ jobs:
       ZEEK_CI_BTEST_JOBS: 6
       ZEEK_CI_BTEST_RETRIES: 2
       ZEEK_CI_RUNNER_OS: macos
+      ZEEK_CI_CCACHE_PRUNE_SIZE: 700M
     macos:
       xcode: << parameters.xcode_version >>
     resource_class: m4pro.medium
@@ -332,21 +342,21 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-
-            - v2-ccache-{{ .Environment.CIRCLE_JOB }}-
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
-          max_size: 2G
           path: ~/.ccache
       - run:
           name: Build
           command: ci/build.sh
       - run:
-          name: Show ccache statistics
-          command: ccache --show-stats
+          name: Show ccache statistics and prune
+          command: |
+            ccache --show-stats
+            CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: v2-ccache-{{ .Environment.CIRCLE_JOB }}-{{ .Branch }}-{{ .Revision }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
           paths:
             - ~/.ccache
       - run:
