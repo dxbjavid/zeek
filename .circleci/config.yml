@@ -221,10 +221,14 @@ jobs:
           steps:
             - run:
                 name: Install spicy analyzers
-                command: ci/spicy-install-analyzers.sh
+                command: |
+                  set +e
+                  ci/spicy-install-analyzers.sh
       - when:
           condition: << parameters.enable_benchmarks >>
           steps:
+            # TODO: this might be best as a separate parameter than a side effect of the
+            # benchmarks parameter.
             - store_artifacts:
                 path: build.tgz
                 destination: build
@@ -503,4 +507,66 @@ workflows:
           name: ubuntu-26.04
           docker_image: zeek/zeek-ci:ubuntu-26.04-20260515
           requires: [fetch-test-traces, build-image-ubuntu-26.04]
+      - linux-build:
+          name: asan-sanitizer
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          configure_flags: --build-type=debug --disable-broker-tests --sanitizers=address --enable-fuzzers --enable-coverage --ccache --enable-werror
+          # https://circleci.com/changelog/introducing-gen2-docker-x86-resource-classes/
+          resource_class: xlarge
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
+          extra_env: |
+            CXXFLAGS=-DZEEK_DICT_DEBUG
+            ASAN_OPTIONS=detect_leaks=1:detect_odr_violation=0
+            CCACHE_BASEDIR=
+      - linux-build:
+          name: asan-sanitizer-zam
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          configure_flags: --build-type=debug --disable-broker-tests --sanitizers=address --enable-fuzzers --ccache --enable-werror
+          # https://circleci.com/changelog/introducing-gen2-docker-x86-resource-classes/
+          resource_class: xlarge
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
+          extra_env: |
+            CXXFLAGS=-DZEEK_DICT_DEBUG
+            ASAN_OPTIONS=detect_leaks=1:detect_odr_violation=0
+            ZEEK_CI_SKIP_UNIT_TESTS=1
+            ZEEK_CI_SKIP_EXTERNAL_BTESTS=1
+            ZEEK_CI_BTEST_EXTRA_ARGS="-a zam"
+            ZEEK_CI_BTEST_JOBS=3
+      - linux-build:
+          name: ubsan-sanitizer
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
+          configure_flags: --build-type=debug --disable-broker-tests --sanitizers=undefined --enable-fuzzers --ccache --enable-werror --disable-javascript
+          extra_env: |
+            CC=clang-19
+            CXX=clang++-19
+            CXXFLAGS=-DZEEK_DICT_DEBUG
+            ZEEK_TAILORED_UB_CHECKS=1
+            UBSAN_OPTIONS=print_stacktrace=1
+      - linux-build:
+          name: ubsan-sanitizer-zam
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
+          configure_flags: --build-type=debug --disable-broker-tests --sanitizers=undefined --enable-fuzzers --ccache --enable-werror --disable-javascript
+          extra_env: |
+            CC=clang-19
+            CXX=clang++-19
+            CXXFLAGS=-DZEEK_DICT_DEBUG
+            ZEEK_TAILORED_UB_CHECKS=1
+            UBSAN_OPTIONS=print_stacktrace=1
+            ZEEK_CI_SKIP_UNIT_TESTS=1
+            ZEEK_CI_SKIP_EXTERNAL_BTESTS=1
+            ZEEK_CI_BTEST_EXTRA_ARGS="-a zam"
+            ZEEK_CI_BTEST_JOBS=3
+      - linux-build:
+          name: tsan-sanitizer
+          docker_image: zeek/zeek-ci:ubuntu-24.04-20260515
+          requires: [fetch-test-traces, build-image-ubuntu-24.04]
+          configure_flags: --build-type=debug --disable-broker-tests --sanitizers=thread --enable-fuzzers --ccache --enable-werror --disable-javascript
+          extra_env: |
+            CC=clang-19
+            CXX=clang++-19
+            ZEEK_CI_DISABLE_SCRIPT_PROFILING=1
+            ZEEK_TSAN_OPTIONS=suppressions=${ZEEK_CI_WORKING_DIR}/ci/tsan_suppressions.txt
+
       - windows-build
