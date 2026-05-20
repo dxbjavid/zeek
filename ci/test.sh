@@ -10,8 +10,8 @@ BTEST=$(pwd)/auxil/btest/btest
 # Due to issues with DNS lookups on macOS, one of the Cirrus support people recommended we
 # run our tests as root. See https://github.com/cirruslabs/cirrus-ci-docs/issues/1302 for
 # more details.
-# TODO: this might not be necessary anymore
-if [[ "${ZEEK_CI_RUNNER_OS}" == "darwin" ]]; then
+# TODO: Is this necessary anymore?
+if [[ "${ZEEK_CI_RUNNER_OS}" == "macos" ]]; then
     BTEST="sudo ${BTEST}"
 fi
 
