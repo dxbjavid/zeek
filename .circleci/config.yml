@@ -309,6 +309,9 @@ jobs:
       - run:
           name: Test
           command: ci/windows/test.cmd
+      - store_test_results:
+          name: Store btest results
+          path: btest-results
 
   macos-build:
     parameters:

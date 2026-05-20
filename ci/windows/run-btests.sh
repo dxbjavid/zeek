@@ -63,4 +63,10 @@ if [ -d .tmp ]; then
     tar -czf tmp.tar.gz .tmp 2>/dev/null || true
 fi
 
+if [[ -n "${CIRCLECI}" ]]; then
+    # Copy these into a location where Circle can get to them easily for the tests view
+    mkdir -p ${CIRCLE_WORKING_DIRECTORY}/btest-results/$1
+    cp btest-results.xml ${CIRCLE_WORKING_DIRECTORY}/btest-results/$1/results.xml
+fi
+
 exit ${result}
