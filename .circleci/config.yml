@@ -197,7 +197,8 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
             - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
           path: ~/.ccache
@@ -211,7 +212,7 @@ jobs:
             CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
           paths:
             - ~/.ccache
       - when:
@@ -274,7 +275,8 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
             - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
           path: C:\tmp\zeek-ccache
@@ -303,7 +305,7 @@ jobs:
             CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
           paths:
             - C:\tmp\zeek-ccache
       - run:
@@ -345,7 +347,8 @@ jobs:
       - restore_cache:
           name: Restore ccache directory
           keys:
-            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
+            - ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-
             - ccache-v1-{{ .Environment.CIRCLE_JOB }}-
       - setup_ccache:
           path: ~/.ccache
@@ -359,7 +362,7 @@ jobs:
             CCACHE_MAXSIZE=${ZEEK_CI_CCACHE_PRUNE_SIZE} ccache -c
       - save_cache:
           name: Save ccache directory
-          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}
+          key: ccache-v1-{{ .Environment.CIRCLE_JOB }}-{{ arch }}-{{ .Branch }}
           paths:
             - ~/.ccache
       - run:
