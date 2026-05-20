@@ -700,6 +700,21 @@ refine connection Handshake_Conn += {
 		return true;
 		%}
 
+	function proc_encrypted_client_hello(rec: HandshakeRecord, ech: EncryptedClientHello) : bool
+		%{
+		if ( ! ssl_extension_encrypted_client_hello )
+			return true;
+
+		auto enc = ${ech.enc};
+		auto enc_string = zeek::make_intrusive<zeek::StringVal>(enc.length(), reinterpret_cast<const char*>(enc.data()));
+		zeek::BifEvent::enqueue_ssl_extension_encrypted_client_hello(zeek_analyzer(), zeek_analyzer()->Conn(),
+									     ${rec.is_orig} ^ flipped_,
+									     ${ech.kdf_id}, ${ech.aead_id}, ${ech.config_id},
+									     std::move(enc_string), ${ech.payload_length});
+
+		return true;
+		%}
+
 };
 
 refine typeattr ClientHello += &let {
@@ -834,4 +849,8 @@ refine typeattr CertificateRequest += &let {
 
 refine typeattr ConnectionId += &let {
 	proc: bool = $context.connection.proc_connection_id(rec, cid);
+};
+
+refine typeattr EncryptedClientHello += &let {
+	proc: bool = $context.connection.proc_encrypted_client_hello(rec, this);
 };
