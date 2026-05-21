@@ -256,7 +256,7 @@ jobs:
       ZEEK_CI_SKIP_EXTERNAL_BTESTS: 1
       ZEEK_CI_CCACHE_PRUNE_SIZE: 700M
     executor:
-      name: win/server-2022
+      name: win/server-2025
       size: large
     steps:
       - run:
