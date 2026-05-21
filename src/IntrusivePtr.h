@@ -2,7 +2,18 @@
 
 #pragma once
 
+// Some versions of gcc will warn about an uninitialized variable way down
+// in the <regex> code in the include chain from <functional>. Ignore
+// that warning.
+#if defined(__GNUC__) && ! defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 #include <functional>
+#if defined(__GNUC__) && ! defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
 #include <type_traits>
 #include <utility>
 
